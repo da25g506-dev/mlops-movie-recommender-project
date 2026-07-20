@@ -12,6 +12,7 @@ implicit==0.7.2
 # Experiment tracking & versioning
 mlflow==2.14.3
 dvc==3.55.2
+pathspec==0.12.1
 
 # Serving
 fastapi==0.111.0

@@ -1,0 +1,5 @@
+outs:
+- md5: 681c0711d0d4548cd3d4718a49c2dcd8
+  size: 134368
+  hash: md5
+  path: users.dat

@@ -1,0 +1,6 @@
+outs:
+- md5: 91c6d6c717a8ae61d09ac9eab4f40c82.dir
+  size: 16274196
+  nfiles: 4
+  hash: md5
+  path: ratings_features.parquet

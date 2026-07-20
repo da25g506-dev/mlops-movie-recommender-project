@@ -1,0 +1,5 @@
+outs:
+- md5: ef9fd9ff8d1b33faf73e2122c371e910
+  size: 171308
+  hash: md5
+  path: movies.dat

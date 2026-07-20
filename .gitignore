@@ -12,13 +12,10 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data & models (tracked by DVC, not git)
-/data/raw/*
-/data/processed/*
-!/data/raw/.gitkeep
-!/data/processed/.gitkeep
-/models/*
-!/models/.gitkeep
+# Data & models are tracked by DVC, not git. `dvc add` writes its own
+# .gitignore entries inside data/raw/, data/processed/, and models/ for the
+# actual large files/dirs it tracks - only the resulting *.dvc pointer
+# files and .gitkeep placeholders are committed to git.
 *.dvc.lock.bak
 
 # MLflow
