@@ -1,0 +1,24 @@
+FROM apache/airflow:2.9.3-python3.10
+
+USER root
+
+# PySpark needs a JVM; DVC/pyspark/scikit-surprise builds need gcc.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        openjdk-17-jre-headless \
+        build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+USER airflow
+
+COPY requirements.txt /opt/airflow/requirements.txt
+# Installed without Airflow's own constraints file: our pipeline scripts
+# run as plain `python3 script.py` subprocesses via BashOperator (not as
+# Airflow provider imports), so they don't need to satisfy Airflow's own
+# transitive pins - and Airflow's constraints pin pandas/numpy to older
+# versions than pyspark 3.5 / mlflow 2.14 require.
+RUN pip install --no-cache-dir -r /opt/airflow/requirements.txt

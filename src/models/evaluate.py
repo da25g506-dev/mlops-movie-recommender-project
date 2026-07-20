@@ -8,6 +8,7 @@ a new version of the "movie-recommender-prod" registered model and
 promote it to stage "Production".
 """
 import logging
+import os
 
 import mlflow
 from mlflow.tracking import MlflowClient
@@ -15,7 +16,7 @@ from mlflow.tracking import MlflowClient
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-MLFLOW_TRACKING_URI = "http://localhost:5000"
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 EXPERIMENT_NAME = "movie-recommender"
 REGISTERED_MODEL_NAME = "movie-recommender-prod"
 SELECTION_METRIC = "recall_at_10"

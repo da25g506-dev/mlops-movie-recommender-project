@@ -12,6 +12,7 @@ serialized model artifact) is logged to MLflow under the experiment
 compare runs and register the best one.
 """
 import logging
+import os
 import pickle
 import tempfile
 from pathlib import Path
@@ -36,7 +37,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MLFLOW_TRACKING_URI = "http://localhost:5000"
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 EXPERIMENT_NAME = "movie-recommender"
 TOP_K = 10
 
