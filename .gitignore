@@ -22,6 +22,7 @@ env/
 mlruns/
 mlartifacts/
 mlflow.db
+mlflow_data/
 
 # Airflow
 airflow/logs/
