@@ -8,7 +8,7 @@ Tracking the 10-stage build plan for this project.
 | 2 | Data pipeline (download + Spark preprocessing + DVC) | ✅ done |
 | 3 | Model development + MLflow tracking | ✅ done |
 | 4 | Airflow orchestration DAG | ✅ done |
-| 5 | FastAPI serving + Dockerization | ⬜ pending |
+| 5 | FastAPI serving + Dockerization | ✅ done |
 | 6 | Monitoring (Prometheus + Grafana + drift detection) | ⬜ pending |
 | 7 | Tests + CI/CD pipeline | ⬜ pending |
 | 8 | Documentation (README + technical report) | ⬜ pending |

@@ -1,0 +1,18 @@
+# Minimal runtime dependencies for the FastAPI serving container.
+# Excludes pyspark/dvc/evidently/pytest/flake8 - those belong to the
+# offline pipeline (Airflow) image, not the always-on serving image.
+
+# Model loading (must match the training environment closely enough to unpickle)
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+scikit-learn==1.4.2
+scikit-surprise==1.1.5
+implicit==0.7.2
+mlflow==2.14.3
+
+# Serving
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+prometheus-fastapi-instrumentator==7.0.0
+pydantic==2.7.4

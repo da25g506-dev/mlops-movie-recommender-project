@@ -1,0 +1,80 @@
+"""Tests for the FastAPI serving layer (src/serving/app.py).
+
+The real app loads a model from the MLflow Model Registry at start-up,
+which isn't available in a unit-test environment. We monkeypatch
+`RecommenderService.load` to install a tiny fake model instead, so the
+tests exercise the actual HTTP routing/validation/logging logic without
+needing a live MLflow server.
+"""
+import json
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+from src.serving import model_loader
+
+
+class FakeModel:
+    def predict(self, model_input: pd.DataFrame):
+        k = int(model_input.iloc[0]["k"])
+        return [list(range(101, 101 + k))]
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    def fake_load(self):
+        self._model = FakeModel()
+        self._catalog = {101: "Movie A", 102: "Movie B", 103: "Movie C"}
+
+    monkeypatch.setattr(model_loader.RecommenderService, "load", fake_load)
+
+    from src.serving import app as app_module
+
+    monkeypatch.setattr(app_module, "PREDICTION_LOG_PATH", tmp_path / "predictions.jsonl")
+
+    with TestClient(app_module.app) as test_client:
+        yield test_client
+
+
+def test_health_ok(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_recommend_returns_titles(client):
+    response = client.get("/recommend/42?k=3")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user_id"] == 42
+    assert body["k"] == 3
+    assert body["recommendations"] == [
+        {"movie_id": 101, "title": "Movie A"},
+        {"movie_id": 102, "title": "Movie B"},
+        {"movie_id": 103, "title": "Movie C"},
+    ]
+
+
+def test_recommend_default_k(client):
+    response = client.get("/recommend/42")
+    assert response.status_code == 200
+    assert response.json()["k"] == 10
+
+
+@pytest.mark.parametrize("k", [0, 101, -5])
+def test_recommend_rejects_invalid_k(client, k):
+    response = client.get(f"/recommend/1?k={k}")
+    assert response.status_code == 400
+
+
+def test_recommend_logs_prediction(client):
+    from src.serving import app as app_module
+
+    client.get("/recommend/7?k=2")
+    lines = app_module.PREDICTION_LOG_PATH.read_text().strip().splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record["user_id"] == 7
+    assert record["k"] == 2
+    assert record["movie_ids"] == [101, 102]
