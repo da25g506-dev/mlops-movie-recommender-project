@@ -13,7 +13,7 @@ Tracking the 10-stage build plan for this project.
 | 7 | Tests + CI/CD pipeline | ✅ done |
 | 8 | Documentation (README + technical report) | ✅ done |
 | 9 | End-to-end verification | ✅ done |
-| 10 | Final polish + release tag | ⬜ pending |
+| 10 | Final polish + release tag | ✅ done |
 
 ## Stage 9 verification summary (2026-07-20)
 
@@ -28,3 +28,11 @@ All 7 `docker compose` services (postgres, airflow-webserver, airflow-scheduler,
 - **Grafana**: provisioned Prometheus datasource and the "Movie Recommender API" dashboard both present via the Grafana API.
 - **Tests**: `pytest tests/` → 24 passed. `flake8` → clean (exit 0).
 - **CI/CD**: GitHub Actions run for the Stage 8 commit (`23a7608`) completed with `conclusion: success` for both `lint-and-test` and `docker` jobs, including the GHCR image push on `main`.
+
+## Stage 10: final polish + release tag
+
+Repo scanned clean before tagging: no `TODO`/`FIXME`/placeholder text remaining, no accidentally-tracked large files, working tree clean. Tagged `v1.0` — the code, tests, docs (README + REPORT), and CI/CD are all in the state verified in the Stage 9 summary above.
+
+## Outstanding (not part of the 10-stage build plan)
+
+The course PDF also requires a **10-minute demonstration video** covering pipeline execution, model training, API deployment, Docker, monitoring/logging, and CI/CD. This is a recording task, not a code/doc task, and hasn't been produced yet.
