@@ -78,3 +78,28 @@ def test_recommend_logs_prediction(client):
     assert record["user_id"] == 7
     assert record["k"] == 2
     assert record["movie_ids"] == [101, 102]
+
+
+def test_drift_metrics_defaults_to_zero_without_status_file(client, tmp_path):
+    from src.serving import app as app_module
+
+    app_module.DRIFT_STATUS_PATH = tmp_path / "drift_status.json"
+    response = client.get("/drift-metrics")
+    assert response.status_code == 200
+    assert "recommender_dataset_drift 0.0" in response.text
+    assert "recommender_drift_share 0.0" in response.text
+    assert "recommender_drift_samples 0.0" in response.text
+
+
+def test_drift_metrics_reflects_status_file(client, tmp_path):
+    from src.serving import app as app_module
+
+    status_path = tmp_path / "drift_status.json"
+    status_path.write_text(json.dumps({"dataset_drift": True, "drift_share": 0.5, "n_samples": 480}))
+    app_module.DRIFT_STATUS_PATH = status_path
+
+    response = client.get("/drift-metrics")
+    assert response.status_code == 200
+    assert "recommender_dataset_drift 1.0" in response.text
+    assert "recommender_drift_share 0.5" in response.text
+    assert "recommender_drift_samples 480.0" in response.text

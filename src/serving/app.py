@@ -17,7 +17,8 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
+from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Gauge, generate_latest
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PREDICTION_LOG_PATH = PROJECT_ROOT / "prediction_logs" / "predictions.jsonl"
 PREDICTION_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+DRIFT_STATUS_PATH = PROJECT_ROOT / "monitoring" / "drift_status.json"
 
 
 @asynccontextmanager
@@ -89,3 +91,30 @@ def recommend(user_id: int, k: int = 10):
 
     _log_prediction(user_id, k, recommendations, latency_ms)
     return {"user_id": user_id, "k": k, "recommendations": recommendations}
+
+
+@app.get("/drift-metrics")
+def drift_metrics():
+    """Exposes the latest offline drift-detection result (produced by
+    monitoring/drift_detection.py) as Prometheus gauges, so Grafana/Prometheus
+    can alert on drift without needing to run Evidently themselves."""
+    registry = CollectorRegistry()
+    dataset_drift = Gauge(
+        "recommender_dataset_drift", "1 if the latest drift check flagged dataset drift, else 0",
+        registry=registry,
+    )
+    drift_share = Gauge(
+        "recommender_drift_share", "Share of drifted columns in the latest drift check", registry=registry
+    )
+    samples = Gauge(
+        "recommender_drift_samples", "Number of recommended-movie samples used in the latest drift check",
+        registry=registry,
+    )
+
+    if DRIFT_STATUS_PATH.exists():
+        status = json.loads(DRIFT_STATUS_PATH.read_text())
+        dataset_drift.set(1 if status.get("dataset_drift") else 0)
+        drift_share.set(status.get("drift_share", 0.0))
+        samples.set(status.get("n_samples", 0))
+
+    return Response(content=generate_latest(registry), media_type=CONTENT_TYPE_LATEST)

@@ -37,6 +37,7 @@ airflow/webserver_config.py
 # Monitoring runtime data
 monitoring/prometheus_data/
 monitoring/grafana_data/
+monitoring/drift_status.json
 prediction_logs/*.jsonl
 drift_reports/*.html
 
