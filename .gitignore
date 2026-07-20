@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data & models (tracked by DVC, not git)
+/data/raw/*
+/data/processed/*
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+/models/*
+!/models/.gitkeep
+*.dvc.lock.bak
+
+# MLflow
+mlruns/
+mlartifacts/
+mlflow.db
+
+# Airflow
+airflow/logs/
+airflow/*.db
+airflow/airflow.cfg
+airflow/webserver_config.py
+*.pid
+
+# Docker / compose overrides
+.env
+
+# Monitoring runtime data
+monitoring/prometheus_data/
+monitoring/grafana_data/
+prediction_logs/*.jsonl
+drift_reports/*.html
+
+# DVC local remote (outside repo, but ignore any accidental local dirs)
+.dvc/cache/
+.dvc/tmp/
+
+# OS / editor
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
