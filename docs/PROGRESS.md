@@ -11,6 +11,6 @@ Tracking the 10-stage build plan for this project.
 | 5 | FastAPI serving + Dockerization | ✅ done |
 | 6 | Monitoring (Prometheus + Grafana + drift detection) | ✅ done |
 | 7 | Tests + CI/CD pipeline | ✅ done |
-| 8 | Documentation (README + technical report) | ⬜ pending |
+| 8 | Documentation (README + technical report) | ✅ done |
 | 9 | End-to-end verification | ⬜ pending |
 | 10 | Final polish + release tag | ⬜ pending |
