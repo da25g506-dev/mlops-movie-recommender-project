@@ -36,3 +36,9 @@ Repo scanned clean before tagging: no `TODO`/`FIXME`/placeholder text remaining,
 ## Outstanding (not part of the 10-stage build plan)
 
 The course PDF also requires a **10-minute demonstration video** covering pipeline execution, model training, API deployment, Docker, monitoring/logging, and CI/CD. This is a recording task, not a code/doc task, and hasn't been produced yet.
+
+## Post-v1.0 fix: `models/` directory was unused
+
+A user review after tagging `v1.0` caught that `models/` was still empty except for a `.gitkeep`, despite the README/REPORT already describing it as "DVC-tracked trained model artifacts." Root cause: `train.py`/`evaluate.py` only ever logged/registered models through MLflow's own artifact store (a Docker volume mounted solely inside the `mlflow` container) — nothing wrote to the local `models/` folder, so DVC had nothing there to track.
+
+Fixed by adding `export_production_model()` to `src/models/evaluate.py` (downloads the newly-promoted Production version's artifacts via `mlflow.artifacts.download_artifacts` into `models/production_model/`) and a new `dvc_commit_model` Airflow task (`models/production_model` → `dvc add` + `dvc push`) appended to the end of `movie_recommender_pipeline`. Verified by re-running the full 6-task DAG end-to-end: `dvc_commit_model` succeeded, `models/production_model.dvc` was created and pushed to the DVC remote, `dvc status` reports up to date, and `pytest`/`flake8` still pass.

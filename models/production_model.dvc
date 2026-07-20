@@ -1,0 +1,6 @@
+outs:
+- md5: 61f7945aef90fc9da39e95aa65198d0c.dir
+  size: 8572535
+  nfiles: 6
+  hash: md5
+  path: production_model

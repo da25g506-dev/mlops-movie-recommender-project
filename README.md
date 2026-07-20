@@ -31,7 +31,7 @@ Given a user ID, the system recommends the top-K movies that user is most likely
 
 \* ALS is trained on implicit confidence weights rather than explicit 1–5 ratings, so rating-error metrics don't apply to it; it's evaluated purely on ranking quality (Precision@K / Recall@K), which is also the metric used to pick a production model. See [REPORT.md](REPORT.md) for the full methodology and discussion.
 
-`src/models/evaluate.py` compares the most recent run of each model family by `recall_at_10` and promotes the winner to the `Production` stage of the `movie-recommender-prod` registered model in MLflow. ALS currently wins and is what the API serves.
+`src/models/evaluate.py` compares the most recent run of each model family by `recall_at_10`, promotes the winner to the `Production` stage of the `movie-recommender-prod` registered model in MLflow, and exports its artifacts to `models/production_model/`, which is then DVC-tracked and pushed by the `dvc_commit_model` Airflow task — so the artifact MLflow serves and the one DVC versions are the same, both traceable back to the exact MLflow run that produced them. ALS currently wins and is what the API serves.
 
 ## System Architecture
 
@@ -39,14 +39,14 @@ Given a user ID, the system recommends the top-K movies that user is most likely
 MovieLens ml-1m (raw .dat files)
         │
         ▼
-┌─────────────────────────── Airflow (movie_recommender_pipeline, @daily) ───────────────────────────┐
-│  download_data → spark_preprocess → dvc_commit_processed → train_models → evaluate_and_register    │
-└───────────────────────────────────────────────────────────────────────────────────────────────────┘
-        │                       │                                  │                  │
-        ▼                       ▼                                  ▼                  ▼
-  data/raw/*.dat      data/processed/*.parquet,csv         MLflow tracking      MLflow Model Registry
-  (DVC-tracked)             (DVC-tracked)                 (3 runs, metrics,      (movie-recommender-prod,
-                                                            params, artifacts)    stage=Production)
+┌────────────────────────────────── Airflow (movie_recommender_pipeline, @daily) ───────────────────────────────────┐
+│  download_data → spark_preprocess → dvc_commit_processed → train_models → evaluate_and_register → dvc_commit_model│
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+        │                       │                                  │                  │                  │
+        ▼                       ▼                                  ▼                  ▼                  ▼
+  data/raw/*.dat      data/processed/*.parquet,csv         MLflow tracking      MLflow Model Registry   models/production_model/
+  (DVC-tracked)             (DVC-tracked)                 (3 runs, metrics,      (movie-recommender-prod,  (DVC-tracked export
+                                                            params, artifacts)    stage=Production)          of the Production model)
                                                                                           │
                                                                                           ▼
                                                                           FastAPI service (Docker, port 8000)
@@ -105,7 +105,7 @@ movie-recommender-mlops/
 ├── scripts/dvc_commit.py              # `dvc add` + `dvc push` helper used by Airflow
 ├── tests/                             # pytest: preprocessing, models, API, drift detection
 ├── data/raw/, data/processed/         # DVC-tracked (git only holds the .dvc pointer files)
-├── models/                            # DVC-tracked trained model artifacts
+├── models/production_model/            # DVC-tracked export of the current Production model
 ├── docker-compose.yml                 # Postgres, Airflow, MLflow, API, Prometheus, Grafana
 ├── Dockerfile.airflow / .mlflow / .api
 ├── requirements.txt                   # full pipeline environment (Airflow image)

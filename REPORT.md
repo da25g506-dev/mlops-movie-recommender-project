@@ -28,12 +28,12 @@ MovieLens ml-1m (raw .dat files)
         │
         ▼
 Airflow DAG "movie_recommender_pipeline" (@daily)
-  download_data → spark_preprocess → dvc_commit_processed → train_models → evaluate_and_register
-        │                  │                    │                  │              │
-        ▼                  ▼                    ▼                  ▼              ▼
-   data/raw/*.dat   data/processed/*.parquet   DVC remote      MLflow runs   MLflow Model Registry
-                                                                              (movie-recommender-prod,
-                                                                               stage = Production)
+  download_data → spark_preprocess → dvc_commit_processed → train_models → evaluate_and_register → dvc_commit_model
+        │                  │                    │                  │              │                      │
+        ▼                  ▼                    ▼                  ▼              ▼                      ▼
+   data/raw/*.dat   data/processed/*.parquet   DVC remote      MLflow runs   MLflow Model Registry   models/production_model/
+                                                                              (movie-recommender-prod,  (DVC-tracked, pushed
+                                                                               stage = Production)        to the same remote)
                                                                                       │
                                                                                       ▼
                                                                       FastAPI service (Docker container)
@@ -103,7 +103,7 @@ All three are wrapped in a common `RecommenderPyfunc` MLflow pyfunc interface (`
 
 **Experiment tracking:** `src/models/train.py` logs, for every run: hyperparameters, all four metrics (where applicable), and the trained model as an MLflow pyfunc artifact with pinned `pip_requirements` (`scikit-surprise==1.1.5`, `implicit==0.7.2`, `pandas==2.2.2`, `numpy==1.26.4`, `scipy==1.13.1`) so the exact serving environment is reproducible from the MLflow artifact alone. Each run is tagged `model_family` (`popularity_baseline` / `svd` / `als`) so `evaluate.py` can programmatically retrieve "the latest run of each family" for comparison.
 
-**Model selection and registration:** `src/models/evaluate.py` retrieves the most recent run of each of the three families, ranks them by `recall_at_10` (chosen because it's the one metric every model family logs, unlike RMSE/MAE which ALS doesn't produce), and registers the winner as a new version of the `movie-recommender-prod` model in the MLflow Model Registry, promoting it to the `Production` stage and archiving any previous production version. In the current run, **ALS** wins and is what the API serves.
+**Model selection and registration:** `src/models/evaluate.py` retrieves the most recent run of each of the three families, ranks them by `recall_at_10` (chosen because it's the one metric every model family logs, unlike RMSE/MAE which ALS doesn't produce), and registers the winner as a new version of the `movie-recommender-prod` model in the MLflow Model Registry, promoting it to the `Production` stage and archiving any previous production version. It then downloads that same model version's artifacts out of MLflow's own artifact store into `models/production_model/`, which the `dvc_commit_model` Airflow task DVC-tracks and pushes to the DVC remote — so the artifact registered in MLflow, the one the API loads, and the one DVC versions are provably the same file, not three independently-managed copies. In the current run, **ALS** wins and is what the API serves.
 
 ## 6. Deployment Strategy
 
@@ -155,6 +155,7 @@ On modeling results specifically: ALS's roughly 65% relative improvement in Prec
 - **Host/container UID mismatches.** The Airflow container runs as uid 50000; the host directories it writes to (raw data, DVC cache) are owned by the host user's uid. Both the `download_data` and `dvc_commit_processed` tasks failed with `PermissionError` until the affected host directories were made group/other-writable.
 - **DVC remote outside the bind-mounted project directory.** The DVC remote lives at a path outside the git repository root (to keep large data out of the repo checkout entirely), which meant it wasn't visible inside any container by default — `docker-compose.yml`'s bind mounts only cover paths under the project root. Fixed by adding an explicit second bind mount for that exact host path.
 - **Stale registry state after an architecture change.** After the MLflow artifact-storage scheme changed, an experiment auto-created during an earlier failed attempt was left pointing at the old artifact-location scheme with zero completed runs, blocking a clean retry. Rather than deleting tracking data unilaterally, this was resolved by presenting the tradeoff explicitly and getting confirmation before running the delete — appropriate given MLflow experiment deletion is irreversible.
+- **`models/` directory initially unused.** The original plan called for DVC-tracking an exported model artifact, but the first implementation only ever logged models into MLflow's own artifact store, leaving `models/` an empty placeholder with just a `.gitkeep`. Caught during a post-build review, not during initial development — a reminder that "the model is trained and served correctly" and "every planned artifact actually exists on disk" are different claims and both need checking. Fixed by adding `export_production_model()` to `evaluate.py` (downloads the newly-promoted version's artifacts out of MLflow via `mlflow.artifacts.download_artifacts`) and a new `dvc_commit_model` Airflow task that DVC-tracks and pushes the result, verified by re-running the full DAG end-to-end and confirming `models/production_model.dvc` and a new file count in the DVC remote.
 
 ## 11. Future Improvements
 

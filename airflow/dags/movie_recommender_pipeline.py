@@ -1,6 +1,7 @@
 """Airflow DAG orchestrating the movie recommender pipeline end-to-end.
 
-download_data -> spark_preprocess -> dvc_commit_processed -> train_models -> evaluate_and_register
+download_data -> spark_preprocess -> dvc_commit_processed -> train_models
+-> evaluate_and_register -> dvc_commit_model
 
 Each task shells out to the corresponding project script inside the
 Airflow worker container, which has the project repository mounted at
@@ -23,7 +24,7 @@ default_args = {
 
 with DAG(
     dag_id="movie_recommender_pipeline",
-    description="Download -> Spark preprocess -> DVC version -> train (3 models) -> evaluate/register",
+    description="Download -> Spark preprocess -> DVC version -> train (3 models) -> evaluate/register -> DVC version model",
     default_args=default_args,
     schedule_interval="@daily",
     start_date=datetime(2026, 1, 1),
@@ -65,4 +66,9 @@ with DAG(
         append_env=True,
     )
 
-    download_data >> spark_preprocess >> dvc_commit_processed >> train_models >> evaluate_and_register
+    dvc_commit_model = BashOperator(
+        task_id="dvc_commit_model",
+        bash_command=f"cd {PROJECT_DIR} && python3 scripts/dvc_commit.py models/production_model",
+    )
+
+    download_data >> spark_preprocess >> dvc_commit_processed >> train_models >> evaluate_and_register >> dvc_commit_model

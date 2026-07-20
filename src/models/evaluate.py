@@ -9,8 +9,11 @@ promote it to stage "Production".
 """
 import logging
 import os
+import shutil
+from pathlib import Path
 
 import mlflow
+import mlflow.artifacts
 from mlflow.tracking import MlflowClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -22,6 +25,21 @@ REGISTERED_MODEL_NAME = "movie-recommender-prod"
 SELECTION_METRIC = "recall_at_10"
 ARTIFACT_PATH = "model"
 MODEL_FAMILIES = ["popularity_baseline", "svd", "als"]
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LOCAL_MODEL_DIR = PROJECT_ROOT / "models" / "production_model"
+
+
+def export_production_model(model_uri: str) -> None:
+    """Download the Production-stage model's artifacts out of MLflow's own
+    artifact store into models/production_model/, so the currently-served
+    model also exists as a plain, DVC-trackable local artifact (not just
+    inside the MLflow server's volume)."""
+    if LOCAL_MODEL_DIR.exists():
+        shutil.rmtree(LOCAL_MODEL_DIR)
+    LOCAL_MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
+    mlflow.artifacts.download_artifacts(artifact_uri=model_uri, dst_path=str(LOCAL_MODEL_DIR))
+    logger.info("Exported production model artifacts to %s", LOCAL_MODEL_DIR)
 
 
 def get_latest_runs(client: MlflowClient, experiment_id: str):
@@ -80,6 +98,8 @@ def main() -> None:
         archive_existing_versions=True,
     )
     logger.info("Promoted version %s to stage Production", result.version)
+
+    export_production_model(model_uri)
 
 
 if __name__ == "__main__":
