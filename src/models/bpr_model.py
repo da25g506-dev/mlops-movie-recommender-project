@@ -1,39 +1,36 @@
-"""ALS-based matrix factorization recommender, using the `implicit` library.
+"""Bayesian Personalized Ranking recommender, using the `implicit` library.
 
-Implicit ALS treats ratings as confidence-weighted implicit feedback
-signals (rather than modeling explicit rating values directly), which is
-the standard approach for top-K recommendation quality. Provided as the
-third, architecturally distinct model alongside the popularity baseline
-and the explicit-rating SVD model.
+Unlike ALS (which minimizes reconstruction error on the confidence-weighted
+rating matrix), BPR directly optimizes pairwise ranking - for each user it
+learns to score observed items above unobserved ones - which is a closer
+match to what Precision@K/Recall@K actually measure. Provided as a fourth
+model family alongside the popularity baseline, SVD, and ALS, to compare a
+ranking-first objective against a reconstruction-first one on the same
+implicit-feedback task.
 
-Raw 1-5 rating values are used directly as confidence weights. BM25
-re-weighting (`implicit.nearest_neighbours.bm25_weight`) was evaluated
-as a candidate improvement, but on a held-out per-user split of this
-dataset it consistently *reduced* Precision@10/Recall@10 relative to raw
-confidence weights - BM25's popularity-downweighting removes signal that
-is actually useful at this data scale (6,040 users x 3,900 movies), so it
-was left out. `factors`/`regularization`/`iterations` below were instead
-tuned via grid search on the same held-out split.
+Uses raw rating values as confidence weights, same as ALSModel (see its
+docstring: BM25 re-weighting was tried and measured worse on a held-out
+split of this dataset, so it isn't used here either).
 """
 from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from implicit.als import AlternatingLeastSquares
+from implicit.bpr import BayesianPersonalizedRanking
 
 
-class ALSModel:
-    def __init__(self, factors: int = 60, regularization: float = 0.01, iterations: int = 8, random_state: int = 42):
-        self.params = dict(factors=factors, regularization=regularization, iterations=iterations)
-        self.model = AlternatingLeastSquares(random_state=random_state, **self.params)
+class BPRModel:
+    def __init__(self, factors: int = 30, regularization: float = 0.1, iterations: int = 200, learning_rate: float = 0.005, random_state: int = 42):
+        self.params = dict(factors=factors, regularization=regularization, iterations=iterations, learning_rate=learning_rate)
+        self.model = BayesianPersonalizedRanking(random_state=random_state, **self.params)
         self.user_to_idx_: Dict[int, int] = {}
         self.idx_to_movie_: Dict[int, int] = {}
         self.movie_to_idx_: Dict[int, int] = {}
         self.user_items_csr_: sp.csr_matrix | None = None
         self.global_mean_: float = 0.0
 
-    def fit(self, train_df: pd.DataFrame) -> "ALSModel":
+    def fit(self, train_df: pd.DataFrame) -> "BPRModel":
         self.global_mean_ = float(train_df["rating"].mean())
 
         users = train_df["user_id"].unique()
@@ -44,7 +41,6 @@ class ALSModel:
 
         row = train_df["user_id"].map(self.user_to_idx_).to_numpy()
         col = train_df["movie_id"].map(self.movie_to_idx_).to_numpy()
-        # Rating value used directly as the implicit "confidence" weight.
         data = train_df["rating"].to_numpy(dtype=np.float32)
 
         self.user_items_csr_ = sp.csr_matrix((data, (row, col)), shape=(len(users), len(movies)))
@@ -52,7 +48,7 @@ class ALSModel:
         return self
 
     def predict_rating(self, user_id: int, movie_id: int) -> float:
-        """ALS optimizes implicit affinity, not explicit rating values, so
+        """BPR optimizes pairwise ranking, not explicit rating values, so
         raw dot-product scores are not on the 1-5 rating scale. RMSE/MAE
         are therefore not meaningful for this model and it is evaluated on
         Precision@K/Recall@K only; this method exists so the same

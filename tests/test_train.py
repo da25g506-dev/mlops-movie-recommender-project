@@ -6,6 +6,7 @@ import pytest
 
 from src.models.als_model import ALSModel
 from src.models.baseline_popularity import PopularityModel
+from src.models.bpr_model import BPRModel
 from src.models.data_utils import build_relevant_items_map, build_user_items_map, train_test_split_by_user
 from src.models.metrics import mae, precision_recall_at_k, rmse
 from src.models.svd_model import SVDModel
@@ -77,6 +78,21 @@ def test_svd_model_fit_and_recommend(synthetic_ratings):
 def test_als_model_fit_and_recommend(synthetic_ratings):
     train_df, test_df = train_test_split_by_user(synthetic_ratings, test_frac=0.3)
     model = ALSModel(factors=4, iterations=3).fit(train_df)
+
+    user_items_map = build_user_items_map(train_df)
+    relevant_items_map = build_relevant_items_map(test_df)
+    test_users = list(relevant_items_map.keys())
+
+    recs = model.recommend_batch(test_users, k=5, user_items_map=user_items_map)
+    assert set(recs.keys()) == set(test_users)
+    for user_id, rec_list in recs.items():
+        assert len(rec_list) <= 5
+        assert not (set(rec_list) & user_items_map.get(user_id, set()))
+
+
+def test_bpr_model_fit_and_recommend(synthetic_ratings):
+    train_df, test_df = train_test_split_by_user(synthetic_ratings, test_frac=0.3)
+    model = BPRModel(factors=4, iterations=3).fit(train_df)
 
     user_items_map = build_user_items_map(train_df)
     relevant_items_map = build_relevant_items_map(test_df)

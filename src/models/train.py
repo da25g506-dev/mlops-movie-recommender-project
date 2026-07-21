@@ -1,9 +1,14 @@
-"""Train and compare three recommender models against MLflow.
+"""Train and compare four recommender models against MLflow.
 
 Models:
   1. Popularity baseline  - non-personalized, global movie-average rating.
   2. SVD (scikit-surprise) - classic explicit-feedback collaborative filtering.
-  3. ALS (implicit)        - implicit-feedback matrix factorization.
+  3. ALS (implicit)        - implicit-feedback matrix factorization
+                             (reconstruction-error objective).
+  4. BPR (implicit)        - implicit-feedback pairwise ranking
+                             (ranking objective), compared against ALS to
+                             see whether optimizing ranking directly beats
+                             optimizing reconstruction for Precision@K/Recall@K.
 
 Each model is trained on a per-user temporal train split and evaluated on
 the held-out per-user test split. Every run (params, metrics, and the
@@ -22,6 +27,7 @@ import mlflow.pyfunc
 
 from src.models.als_model import ALSModel
 from src.models.baseline_popularity import PopularityModel
+from src.models.bpr_model import BPRModel
 from src.models.data_utils import (
     build_movie_catalog,
     build_relevant_items_map,
@@ -105,7 +111,7 @@ def train_svd(train_df, test_df, test_users, user_items_map, relevant_items_map)
 
 def train_als(train_df, test_df, test_users, user_items_map, relevant_items_map):
     with mlflow.start_run(run_name="als_matrix_factorization"):
-        params = {"factors": 50, "regularization": 0.01, "iterations": 15}
+        params = {"factors": 60, "regularization": 0.01, "iterations": 8}
         mlflow.log_params(params)
         mlflow.set_tag("model_family", "als")
 
@@ -118,6 +124,23 @@ def train_als(train_df, test_df, test_users, user_items_map, relevant_items_map)
         _log_pyfunc_model(model, "model")
 
         logger.info("ALS metrics: %s", metrics)
+        return metrics
+
+
+def train_bpr(train_df, test_df, test_users, user_items_map, relevant_items_map):
+    with mlflow.start_run(run_name="bpr_ranking"):
+        params = {"factors": 30, "regularization": 0.1, "iterations": 200, "learning_rate": 0.005}
+        mlflow.log_params(params)
+        mlflow.set_tag("model_family", "bpr")
+
+        model = BPRModel(**params, random_state=42).fit(train_df)
+
+        # Same rationale as ALS: BPR has no rating-scale output, only ranking metrics.
+        metrics = evaluate_ranking(model, test_users, user_items_map, relevant_items_map)
+        mlflow.log_metrics(metrics)
+        _log_pyfunc_model(model, "model")
+
+        logger.info("BPR metrics: %s", metrics)
         return metrics
 
 
@@ -139,6 +162,7 @@ def main() -> None:
     results["popularity"] = train_popularity(train_df, test_df, test_users, user_items_map, relevant_items_map)
     results["svd"] = train_svd(train_df, test_df, test_users, user_items_map, relevant_items_map)
     results["als"] = train_als(train_df, test_df, test_users, user_items_map, relevant_items_map)
+    results["bpr"] = train_bpr(train_df, test_df, test_users, user_items_map, relevant_items_map)
 
     logger.info("=== Summary ===")
     for name, metrics in results.items():

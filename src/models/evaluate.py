@@ -24,7 +24,7 @@ EXPERIMENT_NAME = "movie-recommender"
 REGISTERED_MODEL_NAME = "movie-recommender-prod"
 SELECTION_METRIC = "recall_at_10"
 ARTIFACT_PATH = "model"
-MODEL_FAMILIES = ["popularity_baseline", "svd", "als"]
+MODEL_FAMILIES = ["popularity_baseline", "svd", "als", "bpr"]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_MODEL_DIR = PROJECT_ROOT / "models" / "production_model"
