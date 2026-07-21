@@ -2,9 +2,10 @@
 
 The real app loads a model from the MLflow Model Registry at start-up,
 which isn't available in a unit-test environment. We monkeypatch
-`RecommenderService.load` to install a tiny fake model instead, so the
-tests exercise the actual HTTP routing/validation/logging logic without
-needing a live MLflow server.
+`RecommenderService.load` to install a tiny fake model instead, and
+monkeypatch the Kafka producer getter to a fake producer, so the tests
+exercise the actual HTTP routing/validation/publishing logic without
+needing a live MLflow server or Kafka broker.
 """
 import json
 
@@ -21,6 +22,14 @@ class FakeModel:
         return [list(range(101, 101 + k))]
 
 
+class FakeProducer:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, topic, value):
+        self.sent.append((topic, value))
+
+
 @pytest.fixture
 def client(monkeypatch, tmp_path):
     def fake_load(self):
@@ -31,9 +40,11 @@ def client(monkeypatch, tmp_path):
 
     from src.serving import app as app_module
 
-    monkeypatch.setattr(app_module, "PREDICTION_LOG_PATH", tmp_path / "predictions.jsonl")
+    fake_producer = FakeProducer()
+    monkeypatch.setattr(app_module, "_get_producer", lambda: fake_producer)
 
     with TestClient(app_module.app) as test_client:
+        test_client.fake_producer = fake_producer
         yield test_client
 
 
@@ -68,13 +79,12 @@ def test_recommend_rejects_invalid_k(client, k):
     assert response.status_code == 400
 
 
-def test_recommend_logs_prediction(client):
-    from src.serving import app as app_module
-
+def test_recommend_publishes_prediction_event(client):
     client.get("/recommend/7?k=2")
-    lines = app_module.PREDICTION_LOG_PATH.read_text().strip().splitlines()
-    assert len(lines) == 1
-    record = json.loads(lines[0])
+
+    assert len(client.fake_producer.sent) == 1
+    topic, record = client.fake_producer.sent[0]
+    assert topic == "recommendation-events"
     assert record["user_id"] == 7
     assert record["k"] == 2
     assert record["movie_ids"] == [101, 102]
@@ -84,11 +94,13 @@ def test_drift_metrics_defaults_to_zero_without_status_file(client, tmp_path):
     from src.serving import app as app_module
 
     app_module.DRIFT_STATUS_PATH = tmp_path / "drift_status.json"
+    app_module.FREQUENCY_STATUS_PATH = tmp_path / "recommendation_frequency.json"
     response = client.get("/drift-metrics")
     assert response.status_code == 200
     assert "recommender_dataset_drift 0.0" in response.text
     assert "recommender_drift_share 0.0" in response.text
     assert "recommender_drift_samples 0.0" in response.text
+    assert "recommender_top_movie_share 0.0" in response.text
 
 
 def test_drift_metrics_reflects_status_file(client, tmp_path):
@@ -98,8 +110,13 @@ def test_drift_metrics_reflects_status_file(client, tmp_path):
     status_path.write_text(json.dumps({"dataset_drift": True, "drift_share": 0.5, "n_samples": 480}))
     app_module.DRIFT_STATUS_PATH = status_path
 
+    frequency_path = tmp_path / "recommendation_frequency.json"
+    frequency_path.write_text(json.dumps({"top_movie_share": 0.3}))
+    app_module.FREQUENCY_STATUS_PATH = frequency_path
+
     response = client.get("/drift-metrics")
     assert response.status_code == 200
     assert "recommender_dataset_drift 1.0" in response.text
     assert "recommender_drift_share 0.5" in response.text
     assert "recommender_drift_samples 480.0" in response.text
+    assert "recommender_top_movie_share 0.3" in response.text

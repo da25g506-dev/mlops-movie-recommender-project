@@ -33,7 +33,7 @@ jobs:
         run: pip install --no-cache-dir -r requirements.txt
 
       - name: Lint with flake8
-        run: flake8 src/ tests/ monitoring/ airflow/dags/ scripts/ spark_jobs/
+        run: flake8 src/ tests/ monitoring/ airflow/dags/ scripts/ spark_jobs/ streaming/ beam_jobs/
 
       - name: Run unit tests
         run: pytest tests/ -v

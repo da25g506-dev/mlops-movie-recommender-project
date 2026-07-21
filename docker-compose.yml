@@ -10,6 +10,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
     MLFLOW_TRACKING_URI: http://mlflow:5000
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - airflow_logs:/opt/airflow/logs
@@ -32,6 +33,50 @@ services:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 5s
       retries: 10
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Internal listener (29092) for containers on the compose network,
+      # external listener (9094) so the host/viva demo can inspect topics
+      # with a local kafka-console-consumer if needed.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9094
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9094
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9094:9094"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8081:8080"
+    depends_on:
+      - kafka
     restart: unless-stopped
 
   airflow-init:
@@ -97,6 +142,7 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       REGISTERED_MODEL_NAME: movie-recommender-prod
       MODEL_STAGE: Production
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     ports:
       - "8000:8000"
     volumes:
@@ -104,6 +150,8 @@ services:
       - ./monitoring:/app/monitoring
     depends_on:
       mlflow:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
@@ -147,3 +195,4 @@ volumes:
   mlflow_data:
   prometheus_data:
   grafana_data:
+
